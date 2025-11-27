@@ -68,16 +68,18 @@ async def run_command_bare(command: str | List[str],
                                                       preexec_fn=preexec_fn)
         if stdin is not None:
             try:
-                if p.stdin:
+                if p.stdin and not p.stdin.is_closing():
                     p.stdin.write(stdin.encode())
-                    p.stdin.flush()
+                    await p.stdin.drain()
                 else:
                     logger.warning("Attempted to write to stdin, but stdin is closed.")
             except Exception as e:
                 logger.exception(f"Failed to write to stdin: {e}")
         if p.stdin:
             try:
-                p.stdin.close()
+                if not p.stdin.is_closing():
+                    p.stdin.close()
+                    await p.stdin.wait_closed()
             except Exception as e:
                 logger.warning(f"Failed to close stdin: {e}")
         start_time = time.time()

@@ -5,7 +5,16 @@ run:
 	uvicorn sandbox.server.server:app --reload --host $(HOST) --port $(PORT)
 
 run-online:
-	uvicorn sandbox.server.server:app --host $(HOST) --port $(PORT)
+	gunicorn sandbox.server.server:app \
+		--workers 16 \
+		--worker-class uvicorn.workers.UvicornWorker \
+		--bind $(HOST):$(PORT) \
+		--timeout 120 \
+		--graceful-timeout 120 \
+		--max-requests 5000 \
+		--max-requests-jitter 100 \
+		--backlog 2048 \
+		--worker-tmp-dir /dev/shm
 
 build-server-image:
 	docker build . -f scripts/Dockerfile.server -t sandbox:server

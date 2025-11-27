@@ -1,4 +1,4 @@
-FROM volcengine/sandbox-fusion:base-20250609
+FROM code_sandbox:base
 
 COPY ./runtime/go ./runtime/go
 # download and cache go deps
@@ -38,4 +38,5 @@ RUN useradd -m app && echo 'app:app' | chpasswd \
     && mkdir -p /mnt \
     && chmod og+rwx /mnt
 
+EXPOSE 8080
 CMD bash /root/sandbox/scripts/run.sh
