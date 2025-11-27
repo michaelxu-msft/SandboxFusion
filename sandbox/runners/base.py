@@ -15,6 +15,7 @@
 import asyncio
 import base64
 import os
+import shutil
 import subprocess
 import time
 import traceback
@@ -28,6 +29,7 @@ import resource
 from sandbox.configs.run_config import RunConfig
 from sandbox.runners.isolation import tmp_cgroup, tmp_netns, tmp_overlayfs
 from sandbox.runners.types import CodeRunArgs, CodeRunResult, CommandRunResult, CommandRunStatus
+from sandbox.utils.code_cache import get_code_cache
 from sandbox.utils.common import set_permissions_recursively
 from sandbox.utils.execution import cleanup_process, ensure_bash_integrity, get_output_non_blocking, kill_process_tree
 
@@ -201,3 +203,54 @@ def restore_files(dir: str, files: Dict[str, Optional[str]]):
         os.makedirs(dirpath, exist_ok=True)
         with open(filepath, 'wb') as file:
             file.write(base64.b64decode(content))
+
+
+def get_or_create_code_file(code: str, language: str, suffix: str, target_dir: str) -> str:
+    """
+    Get or create a code file, using cache if enabled.
+    
+    Args:
+        code: The code content
+        language: The programming language
+        suffix: File suffix (e.g., '.py', '.cpp')
+        target_dir: Directory where the file should be located
+        
+    Returns:
+        Path to the code file
+    """
+    cache = get_code_cache(
+        enabled=config.sandbox.code_cache_enabled,
+        cache_dir=config.sandbox.code_cache_dir,
+        max_size_mb=config.sandbox.code_cache_max_size_mb,
+        ttl_seconds=config.sandbox.code_cache_ttl_seconds
+    )
+    
+    if cache:
+        cached_path, was_cached = cache.get_or_cache(code, language, suffix)
+        # Copy cached file to target directory if it exists
+        target_path = os.path.join(target_dir, os.path.basename(cached_path))
+        if was_cached:
+            # Use symlink for better performance
+            try:
+                os.symlink(cached_path, target_path)
+                logger.debug(f"Symlinked cached code file to {target_path}")
+            except OSError:
+                # Fallback to copy if symlink fails
+                shutil.copy2(cached_path, target_path)
+                logger.debug(f"Copied cached code file to {target_path}")
+        else:
+            # For new cache entries, create symlink to avoid duplication
+            try:
+                os.symlink(cached_path, target_path)
+                logger.debug(f"Symlinked new cached code file to {target_path}")
+            except OSError:
+                # Fallback to copy if symlink fails
+                shutil.copy2(cached_path, target_path)
+                logger.debug(f"Copied new code file to {target_path}")
+        return target_path
+    else:
+        # Cache disabled, create file directly
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', dir=target_dir, suffix=suffix, delete=False) as f:
+            f.write(code)
+            return f.name

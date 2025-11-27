@@ -81,6 +81,11 @@ class RunConfig(BaseModel):
         restore_bash: bool
         # overselling is key to reduce cost
         max_concurrency: int
+        # code cache settings
+        code_cache_enabled: bool = True
+        code_cache_dir: Optional[str] = None  # defaults to /tmp/sandbox_code_cache
+        code_cache_max_size_mb: int = 1024  # 1GB default
+        code_cache_ttl_seconds: int = 86400  # 24 hours default
 
     class Common(BaseModel):
         logging_color: bool

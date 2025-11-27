@@ -21,7 +21,7 @@ from functools import cache
 import structlog
 
 from sandbox.configs.run_config import RunConfig
-from sandbox.runners.base import restore_files, run_command_bare, run_commands
+from sandbox.runners.base import get_or_create_code_file, restore_files, run_command_bare, run_commands
 from sandbox.runners.types import CodeRunArgs, CodeRunResult, CommandRunStatus
 from sandbox.utils.common import ensure_php_tag_in_string, find_conda_root
 from sandbox.utils.execution import get_tmp_dir
@@ -72,11 +72,10 @@ async def get_cpp_rt_flags():
 async def run_python(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.py', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'python', '.py', tmp_dir)
 
         return await run_commands(None,
-                                  f'python {f.name}',
+                                  f'python {code_file}',
                                   tmp_dir,
                                   get_python_rt_env('sandbox-runtime'),
                                   args,
@@ -86,20 +85,18 @@ async def run_python(args: CodeRunArgs) -> CodeRunResult:
 async def run_pytest(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.py', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'pytest', '.py', tmp_dir)
 
-        return await run_commands(None, f'pytest {f.name}', tmp_dir, get_python_rt_env('sandbox-runtime'), args)
+        return await run_commands(None, f'pytest {code_file}', tmp_dir, get_python_rt_env('sandbox-runtime'), args)
 
 
 async def run_cpp(args: CodeRunArgs) -> CodeRunResult:
     flags = await get_cpp_rt_flags()
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.cpp', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'cpp', '.cpp', tmp_dir)
 
-        return await run_commands(f'g++ -std=c++17 {f.name} -o test {" ".join(flags)}', './test', tmp_dir, {}, args)
+        return await run_commands(f'g++ -std=c++17 {code_file} -o test {" ".join(flags)}', './test', tmp_dir, {}, args)
 
 
 async def run_csharp(args: CodeRunArgs) -> CodeRunResult:
@@ -120,10 +117,9 @@ async def run_go_test(args: CodeRunArgs) -> CodeRunResult:
         for file in os.listdir(source_dir):
             shutil.copy2(os.path.join(source_dir, file), tmp_dir)
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='_test.go', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'go_test', '_test.go', tmp_dir)
 
-        return await run_commands(None, f'go test {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'go test {code_file}', tmp_dir, {}, args)
 
 
 async def run_go(args: CodeRunArgs) -> CodeRunResult:
@@ -132,10 +128,9 @@ async def run_go(args: CodeRunArgs) -> CodeRunResult:
         for file in os.listdir(source_dir):
             shutil.copy2(os.path.join(source_dir, file), tmp_dir)
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.go', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'go', '.go', tmp_dir)
 
-        return await run_commands(f'go build -o out {f.name}', './out', tmp_dir, {}, args)
+        return await run_commands(f'go build -o out {code_file}', './out', tmp_dir, {}, args)
 
 
 async def run_java(args: CodeRunArgs) -> CodeRunResult:
@@ -179,10 +174,9 @@ async def run_nodejs(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
         os.symlink(os.path.join(deps_dir, 'node_modules'), os.path.join(tmp_dir, 'node_modules'))
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.js', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'nodejs', '.js', tmp_dir)
 
-        return await run_commands(None, f'node {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'node {code_file}', tmp_dir, {}, args)
 
 
 async def run_typescript(args: CodeRunArgs) -> CodeRunResult:
@@ -190,10 +184,9 @@ async def run_typescript(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
         os.symlink(os.path.join(deps_dir, 'node_modules'), os.path.join(tmp_dir, 'node_modules'))
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.ts', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'typescript', '.ts', tmp_dir)
 
-        return await run_commands(None, f'tsx {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'tsx {code_file}', tmp_dir, {}, args)
 
 
 async def run_jest(args: CodeRunArgs) -> CodeRunResult:
@@ -202,8 +195,7 @@ async def run_jest(args: CodeRunArgs) -> CodeRunResult:
         restore_files(tmp_dir, args.files)
         for fn in ['node_modules', 'package.json', 'babel.config.js']:
             os.symlink(os.path.join(deps_dir, fn), os.path.join(tmp_dir, fn))
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.test.ts', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'jest', '.test.ts', tmp_dir)
 
         return await run_commands(None, f'npm run test', tmp_dir, {}, args)
 
@@ -211,28 +203,25 @@ async def run_jest(args: CodeRunArgs) -> CodeRunResult:
 async def run_php(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.php', delete=False) as f:
-            f.write(ensure_php_tag_in_string(args.code))
+        code_file = get_or_create_code_file(ensure_php_tag_in_string(args.code), 'php', '.php', tmp_dir)
 
-        return await run_commands(None, f'php -f {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'php -f {code_file}', tmp_dir, {}, args)
 
 
 async def run_rust(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.rs', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'rust', '.rs', tmp_dir)
 
-        return await run_commands(f'rustc {f.name} -o test', './test', tmp_dir, {}, args)
+        return await run_commands(f'rustc {code_file} -o test', './test', tmp_dir, {}, args)
 
 
 async def run_bash(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.sh', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'bash', '.sh', tmp_dir)
 
-        return await run_commands(None, f'/bin/bash {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'/bin/bash {code_file}', tmp_dir, {}, args)
 
 
 MAJOR_RUNNERS = {

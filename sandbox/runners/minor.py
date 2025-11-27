@@ -17,7 +17,7 @@ import re
 import tempfile
 from typing import Optional
 
-from sandbox.runners.base import restore_files, run_commands
+from sandbox.runners.base import get_or_create_code_file, restore_files, run_commands
 from sandbox.runners.types import CodeRunArgs, CodeRunResult, CommandRunResult, CommandRunStatus
 from sandbox.utils.execution import get_tmp_dir
 
@@ -32,46 +32,41 @@ def find_scala_classname(code) -> Optional[str]:
 async def run_lua(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.lua', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'lua', '.lua', tmp_dir)
 
-        return await run_commands(None, f'lua {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'lua {code_file}', tmp_dir, {}, args)
 
 
 async def run_r(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.R', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'r', '.R', tmp_dir)
 
-        return await run_commands(None, f'Rscript {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'Rscript {code_file}', tmp_dir, {}, args)
 
 
 async def run_perl(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.pl', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'perl', '.pl', tmp_dir)
 
-        return await run_commands(None, f'perl {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'perl {code_file}', tmp_dir, {}, args)
 
 
 async def run_d_ut(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.d', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'd', '.d', tmp_dir)
 
-        return await run_commands(f'dmd {f.name} -unittest -of=test', './test', tmp_dir, {}, args)
+        return await run_commands(f'dmd {code_file} -unittest -of=test', './test', tmp_dir, {}, args)
 
 
 async def run_ruby(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.rb', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'ruby', '.rb', tmp_dir)
 
-        return await run_commands(None, f'ruby {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'ruby {code_file}', tmp_dir, {}, args)
 
 
 async def run_scala(args: CodeRunArgs) -> CodeRunResult:
@@ -82,37 +77,33 @@ async def run_scala(args: CodeRunArgs) -> CodeRunResult:
 
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.scala', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'scala', '.scala', tmp_dir)
 
-        return await run_commands(f'scalac {f.name}', f'scala {classname}', tmp_dir, {}, args)
+        return await run_commands(f'scalac {code_file}', f'scala {classname}', tmp_dir, {}, args)
 
 
 async def run_julia(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.jl', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'julia', '.jl', tmp_dir)
 
-        return await run_commands(None, f'julia {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'julia {code_file}', tmp_dir, {}, args)
 
 
 async def run_kotlin_script(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.kts', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'kotlin', '.kts', tmp_dir)
 
-        return await run_commands(None, f'kotlin {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'kotlin {code_file}', tmp_dir, {}, args)
 
 
 async def run_verilog(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.sv', delete=False) as f:
-            f.write(args.code)
-            # Refer to https://github.com/NVlabs/verilog-eval/blob/4fa0ac4ed70ff1685114c25cd2e4c17cbba6a0c4/verilog_eval/execution.py#L82
-            compile_cmd = f"iverilog -Wall -Winfloop -Wno-timescale -g2012 -s tb -o test.vvp {f.name};"
-            run_cmd = f"vvp -n test.vvp"
+        code_file = get_or_create_code_file(args.code, 'verilog', '.sv', tmp_dir)
+        # Refer to https://github.com/NVlabs/verilog-eval/blob/4fa0ac4ed70ff1685114c25cd2e4c17cbba6a0c4/verilog_eval/execution.py#L82
+        compile_cmd = f"iverilog -Wall -Winfloop -Wno-timescale -g2012 -s tb -o test.vvp {code_file};"
+        run_cmd = f"vvp -n test.vvp"
         return await run_commands(compile_cmd, run_cmd, tmp_dir, {}, args)
 
 
@@ -135,18 +126,16 @@ async def run_lean(args: CodeRunArgs) -> CodeRunResult:
 async def run_swift(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.swift', delete=False) as f:
-            f.write(args.code)
-        return await run_commands(f'swiftc {f.name} -o test.out', './test.out', tmp_dir, {}, args)
+        code_file = get_or_create_code_file(args.code, 'swift', '.swift', tmp_dir)
+        return await run_commands(f'swiftc {code_file} -o test.out', './test.out', tmp_dir, {}, args)
 
 
 async def run_racket(args: CodeRunArgs) -> CodeRunResult:
     with tempfile.TemporaryDirectory(dir=get_tmp_dir(), ignore_cleanup_errors=True) as tmp_dir:
         restore_files(tmp_dir, args.files)
-        with tempfile.NamedTemporaryFile(mode='w', dir=tmp_dir, suffix='.rkt', delete=False) as f:
-            f.write(args.code)
+        code_file = get_or_create_code_file(args.code, 'racket', '.rkt', tmp_dir)
 
-        return await run_commands(None, f'racket {f.name}', tmp_dir, {}, args)
+        return await run_commands(None, f'racket {code_file}', tmp_dir, {}, args)
 
 
 MINOR_RUNNERS = {
